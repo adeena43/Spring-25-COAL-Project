@@ -1,718 +1,798 @@
 include irvine32.inc
-INCLUDE Macros.inc
+
 HEAP_START = 2000000
 HEAP_MAX = 400000000
+
 .data
-HeapCreate PROTO,
-flOptions:DWORD,
-	  dwInitialSize : DWORD,
-				  dwMaximumSize : DWORD
-								  hHeap HANDLE ?
-								  pArray DWORD ?
-								  operation byte "enter: [1] addition  [2] subtract [3]multiply by constant [4]mul by matrice [5]determinant [6]transpose  ", 0
-								  determmsg byte "[2]determinant 2*2  [3]determinant 3*3 [4]determinant 4*4 ", 0
-								  errorinput byte "it's an error input please try again", 0
-								  input byte "Enter the dimension of the matrix:", 0
-								  strr byte "enter the elements of the matrix:", 0
-								  str1 byte"Enter the elements of the first matrix:", 0
-								  str2 byte "Enter the elements of the Second matrix:", 0
-								  output byte "Output:", 0
-								  constmsg byte "enter the constant", 0
+hHeap HANDLE ?
+pArray DWORD ?
+temp_buffer sword 4 DUP(?) 
+adv_size_prompt byte "Choose matrix size:", 0Dh, 0Ah
+                byte "[2] 2x2  [3] 3x3", 0
+error_square byte "Matrix must be square!", 0
 
-								  str3 byte "Enter the elements of the matrix for transpose: ", 0
+; Menu strings
+options byte "Choose operation:", 0Dh, 0Ah
+        byte "[1] Add  [2] Subtract  [3] Multiply by constant", 0Dh, 0Ah
+        byte "[4] Multiply matrices  [5] Determinant  [6] Transpose", 0Dh, 0Ah
+        byte "[7] Adjoint  [8] Inverse  [9] Exit", 0
 
-								  count dword ?
-								  count2 dword ?
+; Error messages
+error_input byte "Invalid input! Try again.", 0
+error_dim byte "Dimension mismatch!", 0
+error_singular byte "Matrix is singular!", 0
 
-								  rows byte ?
-								  columns byte ?
-								  rows2 byte ?
-								  columns2 byte ?
-								  constant sbyte ?
+; Input prompts
+input_dim byte "Enter matrix dimensions (rows columns): ", 0
+input_mat1 byte "Enter first matrix elements:", 0
+input_mat2 byte "Enter second matrix elements:", 0
+input_const byte "Enter constant: ", 0
+output_label byte "Result:", 0
 
-								  matrix1 sbyte 0, 0, 0, 0, 0, 0, 0, 0
-								  sbyte 0, 0, 0, 0, 0, 0, 0, 0
-								  sbyte 0, 0, 0, 0, 0, 0, 0, 0
-								  rowsize1 = ($ - matrix1)
+; Matrix storage
+MAX_SIZE = 16
+matrix1 sword MAX_SIZE DUP(?)
+matrix2 sword MAX_SIZE DUP(?)
+result sword MAX_SIZE DUP(?)
+temp sword MAX_SIZE DUP(?)
 
+rows1 byte ?
+cols1 byte ?
+rows2 byte ?
+cols2 byte ?
+const sword ?
 
-								  matrix2 sword 0, 0, 0, 0, 0, 0, 0, 0
-								  sword 0, 0, 0, 0, 0, 0, 0, 0
-								  sword 0, 0, 0, 0, 0, 0, 0, 0
-								  rowsize2 = ($ - matrix2)
+.code
+main proc
+    INVOKE HeapCreate, 0, HEAP_START, HEAP_MAX
+    mov hHeap, eax
 
-								  matrix3 sbyte  0, 0, 0, 0, 0, 0, 0, 0
-								  sbyte 0, 0, 0, 0, 0, 0, 0, 0
-								  sbyte 0, 0, 0, 0, 0, 0, 0, 0
-								  rowsize3 = ($ - matrix3)
+main_loop:
+    call Clrscr
+    mov edx, OFFSET options
+    call WriteString
+    call Crlf
+    call ReadInt
 
+    cmp eax, 1
+    je addition
+    cmp eax, 2
+    je subtraction
+    cmp eax, 3
+    je multiply_const
+    cmp eax, 4
+    je multiply_matrices
+    cmp eax, 5
+    je determinant
+    cmp eax, 6
+    je transpose
+    cmp eax, 7
+    je adjoint
+    cmp eax, 8
+    je inverse
+    cmp eax, 9
+    je exit_program
 
-								  matrix sbyte  0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-								  sbyte  0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-								  rowsize1 = ($ - matrix)
+    mov edx, OFFSET error_input
+    call WriteString
+    call Crlf
+    call WaitMsg
+    jmp main_loop
 
+addition:
+    call get_two_matrices
+    call matrix_add
+    call show_result
+    jmp main_loop
 
-								  newmatrix sbyte  0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-								  sbyte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-								  rowsize1 = ($ - newmatrix)
+subtraction:
+    call get_two_matrices
+    call matrix_sub
+    call show_result
+    jmp main_loop
 
-								  .code
-								  main proc
-								  INVOKE HeapCreate, 0, HEAP_START, HEAP_MAX
-								  .IF eax == NULL
-								  call WriteWindowsMsg
-								  exit
-								  .ELSE
-								  mov hHeap, eax
-								  .ENDIF
+multiply_const:
+    call get_one_matrix
+    call get_constant
+    call matrix_mul_const
+    call show_result
+    jmp main_loop
 
-								  INVOKE HeapAlloc, hHeap, HEAP_ZERO_MEMORY, 1000
-								  .IF eax == NULL
-								  mWrite "HeapAlloc failed"
-								  exit
-								  .ELSE
-								  mov pArray, eax
-								  .ENDIF
+multiply_matrices:
+    call get_dimensions_mul
+    call input_matrix1
+    call input_matrix2
+    call matrix_mul
+    call show_result
+    jmp main_loop
 
-								  ; ------------------------------------------------------------------------------------------------------------ -
-								  ; ----------------------------------------
-								  ; Ask the user which process to choose : 1 - add two matrixes, , 2 - sub two matrixes
-								  ; 1 - add two matrixes, , 2 - sub two matrixes
-								  ; 3 - mul matrix by constant, , 4 - mul matrix by matrix
-								  ; 5 - determinant operation, , 6 - transpose a matrix
-								  ; if the user enter another choice out of this it will show the error message input
-								  ; ----------------------------------------
-							  choose :
-mwritestring operation
-call crlf
-call readdec
-cmp eax, 1
-je addition
-cmp eax, 2
-je subtraction
-cmp eax, 3
-je mulc
-cmp eax, 4
-je mulm
-cmp eax, 5
-je determinant
-cmp eax, 6
-je transpose
-mwritestring errorinput
-jmp choose
-; ------------------------------
-; ----------------------------------------
-; calculates the addition of two matrixes that the user enter them and it's dimentions
-; ----------------------------------------
+transpose:
+    call get_one_matrix
+    call matrix_transpose
+    call show_result
+    jmp main_loop
 
-addition :
+determinant:
+    call handle_determinant
+    jmp main_loop
 
-mwritestring input
-call crlf
-call readint
-mov rows, al
-call readint
-mov columns, al
+adjoint:
+    call handle_adjoint
+    jmp main_loop
 
-mwritestring str1
-call crlf
-call enter_matrix1
-mwritestring str2
-call crlf
-call enter_matrix2
+inverse:
+    call handle_inverse
+    jmp main_loop
 
-call crlf
-call matrix_addition
-mwritestring output
-call crlf
-call outputt
-jmp choose
-; -------------------------------- -
-; ----------------------------------------
-; calculates the subtraction of two matrixes that the user enter them and it's dimentions
-; ----------------------------------------
-
-subtraction :
-
-mwritestring input
-call crlf
-call readint
-mov rows, al
-call readint
-mov columns, al
-
-mwritestring str1
-call crlf
-call enter_matrix1
-mwritestring str2
-call crlf
-call enter_matrix2
-
-call crlf
-call matrix_subtraction
-mwritestring output
-call crlf
-call outputt
-jmp choose
-; ----------------------------------
-; ----------------------------------------
-; calculates the mul of matrix that the user enter it and it's dimentions and the constant 
-; ----------------------------------------
-
-mulc :
-
-mwritestring input
-call crlf
-call readint
-mov rows, al
-call readint
-mov columns, al
-mwritestring constmsg
-call crlf
-call readint
-mov constant, al
-mwritestring str1
-call crlf
-call enter_matrix1
-
-call matrix_mul_constant
-mwritestring output
-call crlf
-call outputt
-jmp choose
-; --------------------------------------
-; ----------------------------------------
-; calculates the mul of two matrixes that the user enter them and thier dimentions
-; ----------------------------------------
-mulm :
-
-mwritestring input
-call crlf
-call readint
-mov rows, al
-call readint
-mov columns, al
-mwritestring str1
-call crlf
-call enter_matrix1
-again :
-mwritestring input
-call crlf
-call readint
-cmp al, columns
-jne again
-mov rows2, al
-call readint
-mov columns2, al
-mwritestring str2
-call crlf
-call enter_matrix3
-call crlf
-call matrix_mul_matrix
-mwritestring output
-call crlf
-call outputt_for_matrix_multiplication
-jmp choose
-; ----------------------------------
-; ----------------------------------------
-; it returns the transpose of an matrix that the user enter it and it's dimentions 
-; ----------------------------------------
-transpose :
-
-mwritestring input
-call crlf
-call readint
-mov rows, al
-call readint
-mov columns, al
-
-mwritestring str3
-call crlf
-call enter_the_matrix
-call crlf
-call matrix_transpose
-mwritestring output
-call crlf
-call output_trans
-jmp choose
-; == == == == == == == == == == == == == == == == == == == == == == == == =
-; ----------------------------------------
-; calculates the determ of two matrixe that the user enter them and thier dimentions
-; and there are 3 types of it 1 - 2 * 2 determ, , 2 - 3 * 3 determ, , 3 - 4 * 4 determ
-; ----------------------------------------
-determinant :
-
-mwritestring determmsg
-call crlf
-call readint
-cmp eax, 2
-je determ_2_2
-cmp eax, 3
-je determ_3_3
-cmp eax, 4
-je determ_4_4
-; ----------------------
-determ_2_2:
-
-mov rows, 2
-mov columns, 2
-mwritestring strr
-call crlf
-call enter_matrix1
-call determinant_2_2
-mwritestring output
-call crlf
-
-call writeint
-call crlf
-jmp choose
-; ------------------------
-determ_3_3:
-
-mov rows, 3
-mov columns, 3
-mwritestring strr
-call crlf
-call enter_matrix1
-call determinant_3_3
-mwritestring output
-call crlf
-
-call writeint
-call crlf
-jmp choose
-; -------------------- -
-determ_4_4:
-
-mov rows, 4
-mov columns, 4
-mwritestring strr
-call crlf
-call enter_matrix1
-call determinant_4_4
-mwritestring output
-call crlf
-call writeint
-call crlf
-jmp choose
-; ---------------------- -
+exit_program:
+    exit
 main endp
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-; ----------------------------------------
-; it uses in the matrix_mul_constant proc
-; enter the elements of the matrix 3
-; esi contains the offset of the matrix 3
-; ----------------------------------------
-enter_matrix3 proc
 
-mov esi, offset matrix3
-mov al, rows2
-mul columns2
-mov ecx, eax
-l7 :
-call readint
-mov[esi], eax
-inc esi
-loop l7
-ret
-enter_matrix3 endp
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == == =
-; ----------------------------------------
-; it uses in more than one proc to enter the first marix
-; ebx contains the offset of the matrix 1
-; it uses to enter the elements in the matrix
-; ----------------------------------------
-enter_matrix1 proc
+;------------------- Utility Procedures -------------------
+get_two_matrices proc
+    call get_dimensions
+    call input_matrix1
+    call input_matrix2
+    ret
+get_two_matrices endp
 
-mov ebx, offset matrix1
-mov al, rows
-mul columns
-movzx ecx, al
-push ecx
-l1 :
-call readint
-mov[ebx], eax
-inc ebx
-loop l1
-pop ecx
-ret
-enter_matrix1 endp
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == == =
-; ----------------------------------------
-; it uses in more than one proc to enter the second marix
-; esi contains the offset of the matrix 2
-; it uses to enter the elements in the matrix
-; like the enter_matrix1 proc
-; ----------------------------------------
-enter_matrix2 proc
-mov esi, offset matrix2
-push ecx
-l2 :
-call readint
-mov[esi], eax
-inc esi
-loop l2
-pop ecx
-ret
-enter_matrix2 endp
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-; ----------------------------------------
-; it calculates the addition of two matrixes
-; ebx contains the offset of the matrix 1
-; esi contains the offset of the matrix 2
-; it add each element of the first matrix to
-; the opposite element in the secon matrix
-; ----------------------------------------
-matrix_addition proc
+get_one_matrix proc
+    call get_dimensions
+    call input_matrix1
+    ret
+get_one_matrix endp
 
-mov ebx, offset matrix1
-mov esi, offset matrix2
-push ecx
-l3 :
-mov al, sbyte ptr[esi]
-add sbyte ptr[ebx], al
-add esi, 1
-add ebx, 1
-loop l3
-pop ecx
-ret
-matrix_addition endp
-; == == == == == == == == == == == == == == == == == == == == == == ==
-; ----------------------------------------
-; more than 1 poc uses it two show the output of the function
-; ebx contains the offset of the matrix 1 that will show the result
-; reutrn the output in each function
-; ----------------------------------------
-outputt proc uses ecx
+handle_advanced_matrix proc
+    mov edx, OFFSET adv_size_prompt
+    call WriteString
+    call Crlf
+    call ReadInt
 
-mov ebx, offset matrix1
-movzx ecx, rows
-l5 :
-push ecx
-movzx ecx, columns
-l4 :
-movsx eax, sbyte ptr[ebx]
-call writeint
-mov al, ' '
-call writechar
-add ebx, 1
-loop l4
-call crlf
-pop ecx
-loop l5
-ret
-outputt endp
-; == == == == == == == == == == == == == == == == == == == == == == ==
-; ----------------------------------------
-; calculate subtraction of two matrixies
-; esi contains the offset of the matrix 2 that would be subtracted from the matrix 1
-; ebx contains the offset of the matrix 1 that will subtract matrix 2
-; ----------------------------------------
-matrix_subtraction proc
+    cmp eax, 2
+    je valid_size
+    cmp eax, 3
+    je valid_size
+    mov edx, OFFSET error_input
+    call WriteString
+    call Crlf
+    xor al, al
+    ret
 
-mov esi, offset matrix2
-mov ebx, offset matrix1
-push ecx
-l3 :
-mov al, sbyte ptr[esi]
-neg al
-add sbyte ptr[ebx], al
-add esi, 1
-add ebx, 1
-loop l3
-pop ecx
-ret
-matrix_subtraction endp
-; == == == == == == == == == == == == == == == == == == == == == == == == =
-; == == == == == == == == == == == == == == == == == == == == == == == == =
-; ----------------------------------------
-; it takes constant and mul it with each elment of the matrix
-; ebx contains the offset of the matrix 1
-; the result will put in ebx register
-; ----------------------------------------
-matrix_mul_constant proc uses ecx ebx
+valid_size:
+    mov rows1, al
+    mov cols1, al
+    mov edx, OFFSET input_mat1
+    call WriteString
+    call Crlf
+    movzx ecx, rows1
+    imul ecx, ecx
+    mov esi, OFFSET matrix1
+    call read_matrix
+    ret
+handle_advanced_matrix endp
 
-mov ebx, offset matrix1
-l6 :
-mov al, sbyte ptr[ebx]
-imul constant
-mov sbyte ptr[ebx], al
-inc ebx
-loop l6
-ret
-matrix_mul_constant endp
-; == == == == == == == == == == == == == == == == == == == == == == == == == == =
-; ----------------------------------------
-;takes two matrix first one n*m 
-;second should have the same columns of first means m*t
-;and the size result matrix  equal the number of rows of first multiplies the number of columns of  
-;second matrix means n*t
-; ----------------------------------------
-matrix_mul_matrix proc uses ecx
+get_constant proc
+    mov edx, OFFSET input_const
+    call WriteString
+    call ReadInt
+    mov const, ax
+    ret
+get_constant endp
 
-mov edx, offset matrix1
-mov esi, offset matrix3
-mov edi, offset matrix2
-mov al, rows
-mul columns2
-movzx ecx, al
-mov count, 0
-mov count2, 0
-mov eax, 0
-mov ebx, 0
-l1:
-push ecx
+get_dimensions proc
+    mov edx, OFFSET input_dim
+    call WriteString
+    call ReadInt
+    mov rows1, al
+    call ReadInt
+    mov cols1, al
+    mov rows2, al
+    mov cols2, al
+    ret
+get_dimensions endp
 
-mov esi, offset matrix3
-add esi, count
-add edx, count2
+get_dimensions_mul proc
+    mov edx, OFFSET input_dim
+    call WriteString
+    call ReadInt
+    mov rows1, al
+    call ReadInt
+    mov cols1, al
+    mov edx, OFFSET input_dim
+    call WriteString
+    call ReadInt
+    mov cols2, al
+    ret
+get_dimensions_mul endp
 
-movzx ecx, columns
-l9 :
-push ecx
+input_matrix1 proc
+    mov edx, OFFSET input_mat1
+    call WriteString
+    call Crlf
+    movzx ecx, rows1
+    movzx ebx, cols1
+    imul ecx, ebx
+    mov esi, OFFSET matrix1
+    call read_matrix
+    ret
+input_matrix1 endp
 
+input_matrix2 proc
+    mov edx, OFFSET input_mat2
+    call WriteString
+    call Crlf
+    movzx ecx, rows2
+    movzx ebx, cols2
+    imul ecx, ebx
+    mov esi, OFFSET matrix2
+    call read_matrix
+    ret
+input_matrix2 endp
 
-mov al, sbyte ptr[edx]
-imul sbyte ptr[esi]
-add sword ptr[edi], ax
+read_matrix proc
+    pushad
+    L1:
+        call ReadInt
+        mov [esi], ax
+        add esi, 2
+        loop L1
+    popad
+    ret
+read_matrix endp
 
-movzx ecx, columns2
-l3 :
-inc esi
-loop l3
-inc edx
-pop ecx
-loop l9
-cmp columns2, 1
-jna ll
-inc count
-mov edx, offset matrix1
-jmp h
-ll :
-mov count, 0
-h :
-  add edi, 2
-  mov ebx, count
-  cmp bl, columns2
-  jne skip
-  mov edx, offset matrix1
-  mov al, columns
-  add count2, eax
-  mov count, 0
-skip:
-pop ecx
-loop l1
-ret
-matrix_mul_matrix endp
-; == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-; ----------------------------------------
-; it uses to show the output of the matrix_multiplication proc
-; edi conatins the offset of the matrix 2 that will contain the result of the operation mul
-; the result in ax register
-; ----------------------------------------
-outputt_for_matrix_multiplication proc
-mov eax, 0
-mov edi, offset matrix2
-movzx ecx, rows
-l5 :
-push ecx
-movzx ecx, columns2
-l4 :
-mov ax, sword ptr[edi]
-cwd
-call writeint
-mov al, ' '
-call writechar
-add edi, 2
-loop l4
-call crlf
-pop ecx
-loop l5
-ret
-outputt_for_matrix_multiplication endp
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == == =
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == == =
-; ----------------------------------------
-; it calculated determent of the matrix
-; it calculated like "(the first elem * the forth elem) - (the third elem * the second elem)"
-; and retrun the result in eax register
-; esi contains the offset of the matrix 1
-; ----------------------------------------
-determinant_2_2 proc
+show_matrix proc
+    pushad
+    movzx ecx, rows1
+    movzx ebx, cols1
+    mov esi, OFFSET result
+    row_loop:
+        push ecx
+        mov ecx, ebx
+        col_loop:
+            movsx eax, sword ptr [esi]
+            call WriteInt
+            mov al, ' '
+            call WriteChar
+            add esi, 2
+            loop col_loop
+        call Crlf
+        pop ecx
+        loop row_loop
+    popad
+    ret
+show_matrix endp
 
-mov esi, offset matrix1
-mov eax, 0
-mov al, sbyte ptr[esi]
-add esi, 3
-imul sbyte ptr[esi]
-movsx ebx, ax
-dec esi
-mov al, sbyte ptr[esi]
-dec esi
-imul sbyte ptr[esi]
-neg ax
-add bx, ax
-movsx eax, bx
-ret
-determinant_2_2 endp
-; ----------------------------------------------------
-; ----------------------------------------
-; it calculated determent of the matrix
-; it take the first element and canceles the rest of the elements in it's row and column
-; and mul it with the rest of the elment and them look like a determ 2 * 2
-; calculated like "first element *(the first elem * the forth elem) - (the third elem * the second elem)"
-; repeat this operation with the second element and the third elment and take the sum of the tree operation
-; and retrun the result in eax register
-; esi contains the offset of the matrix 1
-; ----------------------------------------
-determinant_3_3 proc
+;------------------- Matrix Operations -------------------
+matrix_add proc
+    pushad
+    mov al, rows1
+    cmp al, rows2
+    jne add_err
+    mov al, cols1
+    cmp al, cols2
+    jne add_err
 
-;;;;;;; first - element
-mov esi, offset matrix1
-mov eax, 0
-mov ebx,0
-movsx bx, sbyte ptr[esi]
-add esi, 4
-movsx ax, sbyte ptr[esi]
-add esi, 4
-imul sbyte ptr[esi]
-mov edx, eax
-dec esi
-movsx ax, sbyte ptr[esi]
-sub esi, 2
-imul sbyte ptr[esi]
+    movzx ecx, rows1
+    movzx ebx, cols1
+    imul ecx, ebx
+    mov esi, OFFSET matrix1
+    mov edi, OFFSET matrix2
+    mov edx, OFFSET result
+    L1:
+        mov ax, [esi]
+        add ax, [edi]
+        mov [edx], ax
+        add esi, 2
+        add edi, 2
+        add edx, 2
+        loop L1
+    jmp add_done
 
-sub edx, eax
-movsx eax, dx
-imul bx
-push eax
-;;;;;;;;; second - element
-mov eax, 0
-mov ebx,0
-mov esi, offset matrix1
-inc esi
-movsx bx, sbyte ptr[esi]
-add esi, 2
-movsx ax, sbyte ptr[esi]
-add esi, 5
-imul sbyte ptr[esi]
-mov edi, eax
-sub esi, 2
-movsx ax, sbyte ptr[esi]
-dec esi
-imul sbyte ptr[esi]
-sub edi, eax
-movsx eax, di
-imul bx
-mov ebx, eax
-pop eax
-neg bx
-add ax, bx
-push eax
-;;;;;;;;;;; third - element
-mov eax, 0
-mov ebx,0
-mov esi, offset matrix1
-add esi, 2
-movsx bx, sbyte ptr[esi]
-inc esi
-movsx ax, sbyte ptr[esi]
-add esi, 4
-imul sbyte ptr[esi]
-mov edi, eax
-dec esi
-movsx ax, sbyte ptr[esi]
-sub esi, 2
-imul sbyte ptr[esi]
-sub edi, eax
-movsx eax, di
-imul bx
-mov ebx, eax
-pop eax
-add eax, ebx
-ret
-determinant_3_3 endp
+    add_err:
+    mov edx, OFFSET error_dim
+    call WriteString
+    call WaitMsg
 
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-determinant_4_4 proc
+    add_done:
+    popad
+    ret
+matrix_add endp
 
-ret
-determinant_4_4 endp
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-; == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-; ----------------------------------------
-; we uses it in the transpose proc
-; to enter the elements of the matrix
-; -------------------------------------- -
-enter_the_matrix proc
+matrix_sub proc
+    pushad
+    mov al, rows1
+    cmp al, rows2
+    jne sub_err
+    mov al, cols1
+    cmp al, cols2
+    jne sub_err
 
-mov ebx, offset matrix
-mov al, rows
-mul columns
-mov ecx, eax
-push ecx
-l1 :
-call readint
-mov[ebx], eax
-inc ebx
-loop l1
-pop ecx
-ret
-enter_the_matrix endp
-; == == == == == == == == == == == == == == == == == == == == == ==
-; ----------------------------------------
-; it's the fuction that do transpose
-; ebx contains the offset of matrix, edx contains the offset of newmatrix
-; ecx contains the length of columns, rows
-; edx contains the calc of transpose
-; ----------------------------------------
+    movzx ecx, rows1
+    movzx ebx, cols1
+    imul ecx, ebx
+    mov esi, OFFSET matrix1
+    mov edi, OFFSET matrix2
+    mov edx, OFFSET result
+    L1:
+        mov ax, [esi]
+        sub ax, [edi]
+        mov [edx], ax
+        add esi, 2
+        add edi, 2
+        add edx, 2
+        loop L1
+    jmp sub_done
+
+    sub_err:
+    mov edx, OFFSET error_dim
+    call WriteString
+    call WaitMsg
+
+    sub_done:
+    popad
+    ret
+matrix_sub endp
+
+matrix_mul_const proc
+    pushad
+    movzx ecx, rows1
+    movzx ebx, cols1
+    imul ecx, ebx
+    mov esi, OFFSET matrix1
+    mov edx, OFFSET result
+    L1:
+        mov ax, [esi]
+        imul const
+        mov [edx], ax
+        add esi, 2
+        add edx, 2
+        loop L1
+    popad
+    ret
+matrix_mul_const endp
+
 matrix_transpose proc
-
-mov ebx, offset matrix
-mov edx, offset newmatrix
-mov cl, columns
-l8 :
-push ecx
-push ebx
-mov cl, rows
-l9 :
-mov al, [ebx]
-add bl, columns
-mov[edx], al
-inc edx
-loop l9
-pop ebx
-pop ecx
-inc ebx
-loop l8
-ret
+    pushad
+    movzx ecx, rows1
+    movzx edx, cols1
+    mov esi, OFFSET matrix1
+    mov edi, OFFSET result
+    
+    xor ebx, ebx
+    transpose_outer:
+        xor eax, eax
+        transpose_inner:
+            mov edi, ebx
+            imul edi, edx
+            add edi, eax
+            shl edi, 1
+            
+            mov esi, eax
+            imul esi, ecx
+            add esi, ebx
+            shl esi, 1
+            
+            mov ax, [matrix1 + esi]
+            mov [result + edi], ax
+            
+            inc eax
+            cmp eax, edx
+            jl transpose_inner
+        inc ebx
+        cmp ebx, ecx
+        jl transpose_outer
+    popad
+    ret
 matrix_transpose endp
-; == == == == == == == == == == == == == == == == == == == == == == == == ==
-; ----------------------------------------
-; it's show the result of transpose matrix
-; ebx contains the offset of the newmatrix that holds the output
-; the result will put in eax register
-; ----------------------------------------
-output_trans proc uses ecx
 
-mov ebx, offset newmatrix
-movzx ecx, columns
-l5 :
-push ecx
-movzx ecx, rows
-l4 :
-movsx eax, byte ptr[ebx]
-call writeint
-mov al, ' '
-call writechar
-add ebx, 1
-loop l4
-call crlf
-pop ecx
-loop l5
-ret
-output_trans endp
-; == == == == == == == == == == == == == == == == == == == == ==
+matrix_mul proc
+    pushad
+    mov al, cols1
+    cmp al, rows2
+    jne mul_err
+    
+    movzx eax, rows1
+    movzx ebx, cols2
+    imul eax, ebx
+    mov ecx, eax
+    mov edi, OFFSET result
+    xor eax, eax
+    rep stosw
+
+    movzx ecx, rows1
+    mov esi, OFFSET matrix1
+    mov edi, OFFSET result
+
+    row_loop:
+        push ecx
+        movzx ecx, cols2
+        mov ebx, OFFSET matrix2
+        
+        col_loop:
+            push ecx
+            movzx ecx, cols1
+            mov edx, esi
+            mov ax, 0
+            
+            dot_product:
+                push ax
+                mov ax, [edx]
+                imul word ptr [ebx]
+                pop dx
+                add ax, dx
+                mov dx, ax
+                add edx, 2
+                add ebx, 2
+                loop dot_product
+            
+            mov [edi], dx
+            add edi, 2
+            pop ecx
+            loop col_loop
+        
+        movzx eax, cols1
+        shl eax, 1
+        add esi, eax
+        pop ecx
+        loop row_loop
+    jmp mul_done
+
+    mul_err:
+    mov edx, OFFSET error_dim
+    call WriteString
+    call WaitMsg
+    
+    mul_done:
+    popad
+    ret
+matrix_mul endp
+
+;------------------- Advanced Operations -------------------
+determinant_2x2 proc
+    pushad
+    mov esi, OFFSET matrix1
+    mov ax, [esi]
+    imul word ptr [esi+6]
+    mov bx, ax
+    mov ax, [esi+2]
+    imul word ptr [esi+4]
+    sub bx, ax
+    mov [result], bx
+    popad
+    ret
+determinant_2x2 endp
+
+determinant_3x3 proc
+    pushad
+    mov esi, OFFSET matrix1
+    mov ax, [esi]        ; a
+    imul word ptr [esi+8] ; f
+    imul word ptr [esi+16] ; i
+    mov bx, ax
+    
+    mov ax, [esi+4]      ; d
+    imul word ptr [esi+12] ; c
+    imul word ptr [esi+20] ; j
+    add bx, ax
+    
+    mov ax, [esi+6]      ; g
+    imul word ptr [esi+14] ; b
+    imul word ptr [esi+22] ; k
+    add bx, ax
+    
+    sub bx, [esi+2]      ; b
+    imul word ptr [esi+10] ; e
+    imul word ptr [esi+18] ; h
+    
+    sub bx, [esi+6]      ; g
+    imul word ptr [esi+16] ; i
+    imul word ptr [esi+4] ; d
+    
+    sub bx, [esi+0]      ; a
+    imul word ptr [esi+14] ; b
+    imul word ptr [esi+22] ; k
+    
+    mov [result], bx
+    popad
+    ret
+determinant_3x3 endp
+
+adjoint_2x2 proc
+    mov esi, OFFSET matrix1
+    mov edi, OFFSET temp
+    
+    mov ax, [esi+6]
+    mov [edi], ax
+    mov ax, [esi]
+    mov [edi+6], ax
+    
+    mov ax, [esi+2]
+    neg ax
+    mov [edi+2], ax
+    
+    mov ax, [esi+4]
+    neg ax
+    mov [edi+4], ax
+    
+    ret
+adjoint_2x2 endp
+
+inverse_2x2 proc
+    call determinant_2x2
+    cmp word ptr [result], 0
+    je singular
+    
+    call adjoint_2x2
+    mov cx, [result]
+    mov esi, OFFSET temp
+    mov edi, OFFSET result
+    mov ecx, 4
+    scale_loop:
+        mov ax, [esi]
+        cwd
+        idiv cx
+        mov [edi], ax
+        add esi, 2
+        add edi, 2
+        loop scale_loop
+    ret
+    
+    singular:
+    mov edx, OFFSET error_singular
+    call WriteString
+    call WaitMsg
+    ret
+inverse_2x2 endp
+
+;======================= 3x3 ADJOINT =======================
+adjoint_3x3 proc
+    pushad
+    ; 1. Calculate matrix of minors
+    mov esi, OFFSET matrix1
+    mov edi, OFFSET temp
+    mov ecx, 9
+    minor_loop_adj:
+        call get_minor_3x3
+        add edi, 2
+        add esi, 2
+        loop minor_loop_adj
+
+    ; 2. Create cofactor matrix
+    mov esi, OFFSET temp
+    mov edi, OFFSET result
+    mov ecx, 9
+    mov ebx, 1
+    cofactor_loop_3x3:
+        mov ax, [esi]
+        imul bx
+        mov [edi], ax
+        neg bx
+        add esi, 2
+        add edi, 2
+        loop cofactor_loop_3x3
+
+    ; 3. Transpose (adjugate)
+    call transpose_3x3
+    popad
+    ret
+adjoint_3x3 endp
+
+get_minor_3x3 proc
+    pushad
+    mov eax, esi
+    sub eax, OFFSET matrix1
+    shr eax, 1
+    
+    xor edx, edx
+    mov ebx, 3
+    div ebx
+    
+    push eax
+    push edx
+    
+    mov ecx, 3
+    mov esi, OFFSET matrix1
+    mov edi, OFFSET temp_buffer
+    xor ebx, ebx
+    
+    row_loop_minor:
+        cmp ebx, eax
+        je skip_row_minor
+        xor edx, edx
+        col_loop_minor:
+            cmp edx, [esp+4]
+            je skip_col_minor
+            mov ax, [esi]
+            mov [edi], ax
+            add edi, 2
+            skip_col_minor:
+            add esi, 2
+            inc edx
+            cmp edx, 3
+            jl col_loop_minor
+        jmp next_row_minor
+        skip_row_minor:
+        add esi, 6
+        next_row_minor:
+        inc ebx
+        loop row_loop_minor
+    
+    call determinant_2x2
+    pop edx
+    pop eax
+    popad
+    ret
+get_minor_3x3 endp
+
+transpose_3x3 proc
+    pushad
+    mov ecx, 3
+    mov ebx, 0
+    transpose_loop:
+        mov eax, ebx
+        imul eax, 6
+        mov ax, [result + eax]
+        xchg ax, [result + ebx*2 + 2]
+        mov [result + eax], ax
+        
+        mov eax, ebx
+        imul eax, 6
+        add eax, 4
+        mov ax, [result + eax]
+        xchg ax, [result + ebx*2 + 4]
+        mov [result + eax], ax
+        
+        inc ebx
+        loop transpose_loop
+    popad
+    ret
+transpose_3x3 endp
+
+;======================= 3x3 INVERSE =======================
+inverse_3x3 proc
+    pushad
+    ; 1. Calculate determinant
+    call determinant_3x3
+    cmp word ptr [result], 0
+    je singular_3x3
+    
+    ; 2. Calculate adjugate
+    call adjoint_3x3
+    
+    ; 3. Divide by determinant
+    mov cx, [result] ; determinant
+    mov esi, OFFSET result
+    mov ecx, 9
+    scale_inverse_3x3:
+        mov ax, [esi]
+        cwd
+        idiv word ptr [result] ; divide by determinant
+        mov [esi], ax
+        add esi, 2
+        loop scale_inverse_3x3
+    jmp inverse_done_3x3
+
+    singular_3x3:
+    mov edx, OFFSET error_singular
+    call WriteString
+    call WaitMsg
+    
+    inverse_done_3x3:
+    popad
+    ret
+inverse_3x3 endp
+
+;======================= UPDATED HANDLERS =======================
+handle_adjoint proc
+    call handle_advanced_matrix
+    cmp rows1, 0
+    je adj_exit
+
+    mov al, rows1
+    cmp al, cols1
+    jne adj_err
+
+    cmp al, 2
+    je adj2
+    cmp al, 3
+    je adj3
+
+adj2:
+    call adjoint_2x2
+    jmp show_adj
+
+adj3:
+    call adjoint_3x3
+
+show_adj:
+    mov esi, OFFSET result
+    call show_matrix
+    call WaitMsg
+    ret
+
+adj_err:
+    mov edx, OFFSET error_square
+    call WriteString
+    call WaitMsg
+
+adj_exit:
+    ret
+handle_adjoint endp
+
+
+;------------------- Advanced Handlers -------------------
+handle_determinant proc
+    call handle_advanced_matrix
+    cmp rows1, 0
+    je det_exit
+
+    mov al, rows1
+    cmp al, cols1
+    jne det_err
+
+    cmp al, 2
+    je det2
+    cmp al, 3
+    je det3
+
+det2:
+    call determinant_2x2
+    jmp show_det
+
+det3:
+    call determinant_3x3
+
+show_det:
+    movsx eax, word ptr [result]
+    call WriteInt
+    call Crlf
+    call WaitMsg
+    ret
+
+det_err:
+    mov edx, OFFSET error_square
+    call WriteString
+    call WaitMsg
+
+det_exit:
+    ret
+handle_determinant endp
+
+
+handle_inverse proc
+    call handle_advanced_matrix
+    cmp rows1, 0
+    je inv_exit
+
+    mov al, rows1
+    cmp al, cols1
+    jne inv_err
+
+    cmp al, 2
+    je inv2
+
+inv2:
+    call inverse_2x2
+    call show_matrix
+    call WaitMsg
+    ret
+
+inv_err:
+    mov edx, OFFSET error_square
+    call WriteString
+    call WaitMsg
+
+inv_exit:
+    ret
+handle_inverse endp
+
+show_result proc
+    mov edx, OFFSET output_label
+    call WriteString
+    call Crlf
+    call show_matrix
+    call WaitMsg
+    ret
+show_result endp
+
 end main
