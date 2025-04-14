@@ -10,12 +10,14 @@ temp_buffer sword 4 DUP(?)
 adv_size_prompt byte "Choose matrix size:", 0Dh, 0Ah
                 byte "[2] 2x2  [3] 3x3", 0
 error_square byte "Matrix must be square!", 0
+div_const_prompt byte "Enter divisor (non-zero): ", 0
+error_div_zero byte "Cannot divide by zero!", 0
 
 ; Menu strings
 options byte "Choose operation:", 0Dh, 0Ah
-        byte "[1] Add  [2] Subtract  [3] Multiply by constant", 0Dh, 0Ah
-        byte "[4] Multiply matrices  [5] Determinant  [6] Transpose", 0Dh, 0Ah
-        byte "[7] Adjoint  [8] Inverse  [9] Exit", 0
+        byte "[1] Add  [2] Subtract  [3] Multiply by constant  [4] Divide by a constant", 0Dh, 0Ah
+        byte "[5] Multiply matrices  [6] Determinant  [7] Transpose", 0Dh, 0Ah
+        byte "[8] Adjoint  [9] Inverse  [10] Exit", 0
 
 ; Error messages
 error_input byte "Invalid input! Try again.", 0
@@ -61,22 +63,32 @@ main_loop:
     cmp eax, 3
     je multiply_const
     cmp eax, 4
-    je multiply_matrices
-    cmp eax, 5
-    je determinant
+    je divide_const
     cmp eax, 6
-    je transpose
+    je multiply_matrices
     cmp eax, 7
-    je adjoint
+    je determinant
     cmp eax, 8
-    je inverse
+    je transpose
     cmp eax, 9
+    je adjoint
+    cmp eax, 10
+    je inverse
+    cmp eax, 11
     je exit_program
 
+    ; Invalid input handling
     mov edx, OFFSET error_input
     call WriteString
     call Crlf
     call WaitMsg
+    jmp main_loop
+
+divide_const:
+    call get_one_matrix
+    call get_constant
+    call matrix_div_const
+    call show_result
     jmp main_loop
 
 addition:
@@ -171,13 +183,6 @@ valid_size:
     ret
 handle_advanced_matrix endp
 
-get_constant proc
-    mov edx, OFFSET input_const
-    call WriteString
-    call ReadInt
-    mov const, ax
-    ret
-get_constant endp
 
 get_dimensions proc
     mov edx, OFFSET input_dim
@@ -384,6 +389,55 @@ matrix_transpose proc
     popad
     ret
 matrix_transpose endp
+
+matrix_div_const proc
+    pushad
+    ; Check for division by zero (should be prevented by get_constant, but double-check)
+    cmp const, 0
+    je div_zero_error
+
+    movzx ecx, rows1
+    movzx ebx, cols1
+    imul ecx, ebx
+    mov esi, OFFSET matrix1
+    mov edi, OFFSET result
+
+divide_loop:
+    mov ax, [esi]       ; Load current element
+    cwd                 ; Sign extend AX into DX:AX
+    idiv const          ; Divide by constant
+    mov [edi], ax       ; Store result
+    add esi, 2
+    add edi, 2
+    loop divide_loop
+    jmp div_done
+
+div_zero_error:
+    mov edx, OFFSET error_div_zero
+    call WriteString
+    call WaitMsg
+
+div_done:
+    popad
+    ret
+matrix_div_const endp
+
+; Updated get_constant to prevent zero input
+get_constant proc
+get_input:
+    mov edx, OFFSET div_const_prompt
+    call WriteString
+    call ReadInt
+    cmp ax, 0
+    jne valid_divisor
+    mov edx, OFFSET error_div_zero
+    call WriteString
+    call Crlf
+    jmp get_input
+valid_divisor:
+    mov const, ax
+    ret
+get_constant endp
 
 matrix_mul proc
     pushad
