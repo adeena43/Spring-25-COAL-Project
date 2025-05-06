@@ -7,8 +7,7 @@ HEAP_MAX = 400000000
 hHeap HANDLE ?
 pArray DWORD ?
 temp_buffer sword 4 DUP(?)
-adv_size_prompt byte "Choose matrix size:", 0Dh, 0Ah
-                byte "[2] 2x2  [3] 3x3", 0
+adv_size_prompt byte "Press 2 for selecting [2x2] matrix size:", 0Dh, 0Ah
 error_square byte "Matrix must be square!", 0
 div_const_prompt byte "Enter divisor (non-zero): ", 0
 error_div_zero byte "Cannot divide by zero!", 0
