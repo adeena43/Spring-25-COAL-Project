@@ -7,7 +7,8 @@ HEAP_MAX = 400000000
 hHeap HANDLE ?
 pArray DWORD ?
 temp_buffer sword 4 DUP(?)
-adv_size_prompt byte "Press 2 for selecting [2x2] matrix size:", 0Dh, 0Ah
+adv_size_prompt byte "Choose matrix size:", 0Dh, 0Ah
+                byte "[2] 2x2", 0
 error_square byte "Matrix must be square!", 0
 div_const_prompt byte "Enter divisor (non-zero): ", 0
 error_div_zero byte "Cannot divide by zero!", 0
@@ -802,15 +803,10 @@ handle_adjoint proc
 
     cmp al, 2
     je adj2
-    cmp al, 3
-    je adj3
 
 adj2:
     call adjoint_2x2
     jmp show_adj
-
-adj3:
-    call adjoint_3x3
 
 show_adj:
     mov esi, OFFSET result
@@ -826,96 +822,6 @@ adj_err:
 adj_exit:
     ret
 handle_adjoint endp
-
-adjoint_3x3 proc
-    pusha
-    mov ecx, 0              ; index 0-8 (row-major order)
-
-calc_cofactor:
-    ; row = ecx / 3, col = ecx % 3
-    mov eax, ecx
-    xor edx, edx
-    mov ebx, 3
-    div ebx                 ; EAX = row, EDX = col
-
-    push eax        ; row
-    push edx        ; col
-    call get_minor  ; AX = minor determinant
-    add esp, 8
-
-    ; Apply cofactor sign: (-1)^(row + col)
-    add al, dl
-    and al, 1
-    jz no_sign
-    neg ax
-no_sign:
-    mov [temp + ecx * 2], ax
-
-    inc ecx
-    cmp ecx, 9
-    jl calc_cofactor
-
-    ; Transpose cofactor matrix to get adjoint
-    call transpose_3x3
-
-    popa
-    ret
-adjoint_3x3 endp
-
-get_minor proc
-    push ebp
-    mov ebp, esp
-    pusha
-
-    mov eax, [ebp+8]        ; row to exclude
-    mov edx, [ebp+12]       ; column to exclude
-
-    xor ecx, 0              ; row loop index
-    xor edi, edi            ; index into temp_buffer
-    xor esi, esi            ; matrix index
-
-fill_minor:
-    mov ebx, ecx
-    cmp ebx, eax
-    je skip_row
-
-    xor ebx, 0              ; col index
-fill_cols:
-    cmp ebx, edx
-    je skip_col
-
-    ; Calculate offset = (ecx * 3 + ebx) * 2
-    mov esi, ecx
-    imul esi, 3
-    add esi, ebx
-    shl esi, 1
-    mov ax, [matrix1 + esi]
-    mov [temp_buffer + edi*2], ax
-    inc edi
-
-skip_col:
-    inc ebx
-    cmp ebx, 3
-    jl fill_cols
-
-skip_row:
-    inc ecx
-    cmp ecx, 3
-    jl fill_minor
-
-    ; determinant of 2x2: a*d - b*c
-    mov ax, [temp_buffer]        ; a
-    imul word ptr [temp_buffer+6] ; a*d
-    mov cx, ax
-    mov ax, [temp_buffer+2]      ; b
-    imul word ptr [temp_buffer+4] ; b*c
-    sub cx, ax
-    mov ax, cx
-
-    popa
-    pop ebp
-    ret
-get_minor endp
 
 transpose_3x3 proc
     pushad
@@ -961,45 +867,6 @@ transpose_3x3 proc
     popad
     ret
 transpose_3x3 endp
-
-;======================= 3x3 INVERSE =======================
-inverse_3x3 proc
-    pushad
-   
-    ; 1. Calculate determinant
-    call determinant_3x3
-    cmp word ptr [result], 0
-    je singular_3x3
-   
-    ; Store determinant in bx (not used as counter)
-    mov bx, [result]
-   
-    ; 2. Calculate adjugate
-    call adjoint_3x3
-   
-    ; 3. Divide each element by determinant
-    mov esi, OFFSET result
-    mov ecx, 9        ; 9 elements for 3x3 matrix
-   
-scale_inverse_3x3:
-    mov ax, [esi]     ; Load numerator
-    cwd               ; Sign extend ax to dx:ax
-    idiv bx           ; Divide by determinant (stored in bx)
-    mov [esi], ax     ; Store result
-    add esi, 2
-    loop scale_inverse_3x3
-   
-    jmp inverse_done_3x3
-
-singular_3x3:
-    mov edx, OFFSET error_singular
-    call WriteString
-    call WaitMsg
-   
-inverse_done_3x3:
-    popad
-    ret
-inverse_3x3 endp
 
 ;======================= UPDATED HANDLERS =======================
 ;------------------- Advanced Handlers -------------------
@@ -1051,16 +918,10 @@ handle_inverse proc
 
     cmp al, 2
     je inv2
-    cmp al, 3
-    je inv3
     jmp inv_err  ; For other sizes (though your code only handles 2x2 and 3x3)
 
 inv2:
     call inverse_2x2
-    jmp inv_display
-
-inv3:
-    call inverse_3x3
     jmp inv_display
 
 inv_display:
@@ -1087,4 +948,3 @@ show_result proc
 show_result endp
 
 end main
-
