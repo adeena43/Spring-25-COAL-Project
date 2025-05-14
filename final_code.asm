@@ -15,6 +15,7 @@ debug_input_msg byte "Input Matrix:",0dh,0ah,0
 debug_minors_msg byte "Matrix of Minors:",0dh,0ah,0
 debug_cofactors_msg byte "Cofactor Matrix:",0dh,0ah,0
 debug_adjoint_msg byte "Adjoint Matrix:",0dh,0ah,0
+mul_error byte "Dimension error, matrices non-multiplicable.", 0
 
 success_msg db "Matrix multiplication completed successfully!", 0Dh, 0Ah, 0
 
@@ -32,7 +33,7 @@ error_singular byte "Matrix is singular!", 0
 
 ; Input prompts
 input_dim byte "Enter matrix dimensions (rows columns): ", 0
-input_mat1 byte "Enter first matrix elements:", 0
+input_mat1 byte "Enter matrix elements:", 0
 input_mat2 byte "Enter second matrix elements:", 0
 input_const byte "Enter constant: ", 0
 output_label byte "Result:", 0
@@ -118,11 +119,18 @@ multiply_const:
 
 multiply_matrices:
     call get_dimensions_mul
+    mov al, [cols1]
+    cmp al, [rows2]
+    jne clean_exit
     call input_matrix1
     call input_matrix2
     call matrix_mul
     call show_result
     jmp main_loop
+clean_exit:
+    mov edx, OFFSET mul_error
+    call WriteString
+    exit
 
 transpose:
     call get_one_matrix
@@ -199,7 +207,9 @@ get_dimensions proc
     mov rows1, al
     call ReadInt
     mov cols1, al
+    call ReadInt
     mov rows2, al
+    call ReadInt
     mov cols2, al
     ret
 get_dimensions endp
