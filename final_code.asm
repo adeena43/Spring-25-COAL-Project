@@ -55,9 +55,6 @@ cols2 byte ?
 
 .code
 main proc
-    INVOKE HeapCreate, 0, HEAP_START, HEAP_MAX
-    mov hHeap, eax
-
 main_loop:
     call Clrscr
     mov edx, OFFSET options
