@@ -135,6 +135,10 @@ clean_exit:
 transpose:
     call get_one_matrix
     call matrix_transpose
+    mov al, rows1
+    mov bl, cols1
+    mov cols1, al
+    mov rows1, bl
     call show_result
     jmp main_loop
 
@@ -384,39 +388,39 @@ matrix_transpose proc
     pushad
 
     ; Verify rows1 and cols1 are > 0
-    movzx ecx, byte ptr [rows1]
+    movzx ecx, byte ptr [rows1]  ; ecx = original rows (will become cols in result)
     test ecx, ecx
     jz exit_proc       ; If rows1=0, exit
-    movzx edx, byte ptr [cols1]
+    movzx edx, byte ptr [cols1]  ; edx = original cols (will become rows in result)
     test edx, edx
     jz exit_proc       ; If cols1=0, exit
 
-    xor ebx, ebx       ; i = 0 (row index)
+    xor ebx, ebx       ; i = 0 (row index for original matrix)
    
 outer_loop:
-    xor eax, eax       ; j = 0 (col index)
+    xor eax, eax       ; j = 0 (col index for original matrix)
    
 inner_loop:
     ; Calculate source address: matrix1[i][j] = (i * cols1 + j) * 2
     mov esi, ebx       ; esi = i
-    imul esi, edx      ; esi = i * cols1
+    imul esi, edx      ; esi = i * cols1 (original)
     add esi, eax       ; esi = i * cols1 + j
     shl esi, 1         ; *2 for word size
     mov di, [matrix1 + esi]  ; Load word from matrix1
 
     ; Calculate destination address: result[j][i] = (j * rows1 + i) * 2
-    mov esi, eax       ; esi = j
-    imul esi, ecx      ; esi = j * rows1
+    mov esi, eax       ; esi = j (will be row in result)
+    imul esi, ecx      ; esi = j * rows1 (original rows becomes cols in result)
     add esi, ebx       ; esi = j * rows1 + i
     shl esi, 1         ; *2 for word size
     mov [result + esi], di   ; Store transposed
 
     inc eax            ; j++
-    cmp eax, edx
+    cmp eax, edx       ; Compare with original cols (now rows in result)
     jl inner_loop
 
     inc ebx            ; i++
-    cmp ebx, ecx
+    cmp ebx, ecx       ; Compare with original rows (now cols in result)
     jl outer_loop
 
 exit_proc:
